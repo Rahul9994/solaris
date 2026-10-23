@@ -2,6 +2,8 @@
 
 A cinematic planet-to-planet experience. Every planet page is a full-bleed "photograph" with a huge title, a stats table and a squircle **portal card** showing the next world from orbit. Step into the card: it opens to full screen, the camera falls through the planet's clouds, and you land on the next surface.
 
+**Live: https://rahul9994.github.io/solaris/**
+
 Nothing is downloaded: every landscape, planet texture and star is painted live on your GPU.
 
 ```bash

@@ -34,9 +34,15 @@ export default function App() {
       return;
     }
     const { stage, director } = createEngine(canvas);
-    const fit = () => stage.resize(window.innerWidth, window.innerHeight);
+    // refit whenever the page changes size (also covers booting while hidden or zero-sized)
+    const fit = () => {
+      if (window.innerWidth > 0 && window.innerHeight > 0) stage.resize(window.innerWidth, window.innerHeight);
+    };
     fit();
     window.addEventListener('resize', fit);
+    document.addEventListener('visibilitychange', fit);
+    const ro = new ResizeObserver(fit);
+    ro.observe(document.documentElement);
     stage.start();
     void director.boot().catch((e) => {
       console.error('SOLARIS boot failed', e);
@@ -45,6 +51,8 @@ export default function App() {
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__solaris = { stage, director, store: useStore, gsap };
     return () => {
       window.removeEventListener('resize', fit);
+      document.removeEventListener('visibilitychange', fit);
+      ro.disconnect();
       destroyEngine();
       sw.current = false;
     };
