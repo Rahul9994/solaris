@@ -3,7 +3,7 @@ import { useStore } from '../state/store';
 import { Logo } from './Logo';
 
 /**
- * Brand mark in the middle, a big thin counter at the bottom. The counter follows real baking progress,
+ * Brand mark in the middle, a big thin counter at the bottom. The counter follows real loading progress,
  * but never runs faster than a calm pace, so it always reads as a deliberate count-up.
  */
 export function Loader({ onDone }: { onDone: () => void }) {
@@ -24,8 +24,9 @@ export function Loader({ onDone }: { onDone: () => void }) {
       const dt = Math.min(80, now - last) / 1000;
       last = now;
       const elapsed = (now - t0.current) / 1000;
-      // pace limit: reaches 100 no sooner than ~2.1s after mount
-      const paceCap = Math.min(100, (elapsed / 2.1) * 100);
+      // pace limit: reaches 100 no sooner than ~1.1s after mount (the planets are shipped as pictures now, so
+      // real progress is quick; the cap only keeps the count-up from flashing past)
+      const paceCap = Math.min(100, (elapsed / 1.1) * 100);
       const want = Math.min(targetRef.current, paceCap);
       v += (want - v) * Math.min(1, dt * 5.5);
       if (want >= 99.9 && v > 99.4) v = 100;
@@ -62,7 +63,7 @@ export function Loader({ onDone }: { onDone: () => void }) {
         {Math.round(shown)}
         <small>%</small>
       </div>
-      <div className="tip">Painting the planets on your GPU</div>
+      <div className="tip">Gathering the planets</div>
     </div>
   );
 }

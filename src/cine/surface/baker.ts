@@ -40,7 +40,11 @@ function makeNoiseTexture() {
 
 export interface Baked {
   id: PlanetId;
+  /** what the compositor samples: colour in RGB, parallax depth in A */
+  texture: THREE.Texture;
   rt: THREE.WebGLRenderTarget;
+  /** where it came from: painted on this GPU, or one of the shipped pictures */
+  from: 'gpu' | 'file';
   width: number;
   height: number;
   ms: { compile: number; height: number; color: number; total: number };
@@ -228,7 +232,9 @@ export class SurfaceBaker {
     const t1 = performance.now();
     return {
       id,
+      texture: rt.texture,
       rt,
+      from: 'gpu',
       width: w,
       height: h,
       ms: { compile: tCompile - t0, height: tHeight - tCompile, color: t1 - tHeight, total: t1 - t0 },

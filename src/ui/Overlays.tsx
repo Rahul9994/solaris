@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { persist, useStore, Overlay } from '../state/store';
 import { PLANETS, PlanetId } from '../data/planets';
 import { QUALITY, Quality } from '../cine/quality';
-import { TITLE_FONTS, loadFontPreviews } from '../data/fonts';
+import { TITLE_FONTS } from '../data/fonts';
 import { getDirector, getStage } from '../cine/engine';
 import { Thumbnailer } from '../cine/thumbs';
 import { sfx } from '../lib/sound';
@@ -34,9 +34,6 @@ export function MenuOverlay() {
   const webgl = useStore((s) => s.webgl);
   const open = overlay === 'menu';
   useOverlayKeys(open);
-  useEffect(() => {
-    if (open) loadFontPreviews();
-  }, [open]);
 
   const goto = (o: Overlay) => {
     useStore.setState({ overlay: o });
@@ -213,13 +210,13 @@ export function AboutOverlay() {
         </p>
         <div className="cols">
           <p className="rise" style={rise(3)}>
-            Every landscape here is a photograph that never existed. Your graphics card paints Mars, Venus, Earth and the rest the moment the page opens: terrain is generated, lit by a low sun, fogged with dust and developed into an image.
+            Every landscape here is a photograph that never existed. A graphics card painted Mars, Venus, Earth and the rest once, ahead of time: terrain generated, lit by a low sun, fogged with dust and developed into an image. The pictures ship with the site, so every world opens at once.
           </p>
           <p className="rise" style={rise(4)}>
             The card you enter shows the next planet from orbit as a live 3D globe with its own atmosphere, clouds and rings. Try Explore to spin any world yourself and read what is known about it.
           </p>
           <p className="rise" style={rise(5)}>
-            Distances, years and temperatures come from NASA’s planetary fact sheets. The scenery is an artist’s impression, not survey data: rocks, storms and rings are placed for the picture. Nothing is downloaded, so there are no stock photos here.
+            Distances, years and temperatures come from NASA’s planetary fact sheets. The scenery is an artist’s impression, not survey data: rocks, storms and rings are placed for the picture. There are no stock photos here.
           </p>
         </div>
         <div className="figures rise" style={rise(6)}>
@@ -229,11 +226,11 @@ export function AboutOverlay() {
           </div>
           <div>
             <b>00</b>
-            <span>Photos downloaded</span>
+            <span>Stock photos</span>
           </div>
           <div>
             <b>01</b>
-            <span>GPU doing the painting</span>
+            <span>GPU did the painting</span>
           </div>
         </div>
       </div>

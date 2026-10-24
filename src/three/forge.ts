@@ -3,10 +3,12 @@ import { BAKE_VERT, bakeFragment } from './shaders/bake';
 import { buildEarthMaps } from './earthMap';
 import { BODY_MAP, BodyDef } from '../data/bodies';
 import { renderInStrips, waitGPU, yieldTask } from '../cine/gpu';
+import { bakedTextureInfo, loadBakedTexture } from '../cine/bakedLoad';
 
 /**
- * Paints each planet's equirectangular surface on the GPU. No image files: every texture is generated
- * from the recipes in shaders/bake.ts. Jobs are keyed by planet id plus a few helpers
+ * Every planet texture is generated from the recipes in shaders/bake.ts. They are painted once, offline
+ * (/bake.html), and shipped as pictures; the GPU recipes only run for that tool or as a fallback when a picture
+ * is missing. Jobs are keyed by planet id plus a few helpers
  * ('earthExtra' = clouds/cities/ocean mask, 'ringSaturn', 'ringUranus').
  */
 interface Job {
@@ -140,21 +142,65 @@ class TextureForge {
     keys.forEach((k) => this.urgent.add(k));
   }
 
-  /** Bakes the requested keys (skipping finished ones, sharing in-flight ones). Foreground calls promote them. */
+  /**
+   * Makes the requested textures ready (skipping finished ones, sharing in-flight ones): the shipped pictures
+   * when there are any, painted on the GPU otherwise. Foreground calls promote GPU work to full speed.
+   */
   async bake(gl: THREE.WebGLRenderer, keys: string[], size: number, onJob?: (key: string, done: number, total: number) => void, background = false): Promise<void> {
     if (!background) this.promote(keys);
     const todo = keys.filter((k) => !this.textures[k]);
-    let done = 0;
-    for (const key of todo) {
+    // start everything first so shipped pictures download side by side
+    const jobs = todo.map((key) => {
       let p = this.inflight.get(key);
       if (!p) {
-        p = this.bakeOne(gl, key, size);
+        p = this.produce(gl, key, size);
         this.inflight.set(key, p);
         void p.finally(() => this.inflight.delete(key));
       }
+      return p;
+    });
+    let done = 0;
+    for (const p of jobs) {
       await p;
-      onJob?.(key, ++done, todo.length);
+      onJob?.(todo[done], ++done, todo.length);
     }
+  }
+
+  /** Always paints on the GPU, ignoring shipped pictures (used by the offline bake tool). */
+  async bakeGPU(gl: THREE.WebGLRenderer, key: string, size: number) {
+    this.promote([key]);
+    delete this.textures[key];
+    await this.bakeOne(gl, key, size);
+    return this.targets[key];
+  }
+
+  /** the render target behind a finished texture */
+  target(key: string) {
+    return this.targets[key];
+  }
+
+  private sizeOf(key: string, size: number) {
+    const j = this.job(key, size);
+    return { w: j.w, ring: !!j.ring };
+  }
+
+  private async produce(gl: THREE.WebGLRenderer, key: string, size: number) {
+    const info = bakedTextureInfo(key);
+    if (info) {
+      try {
+        const { w, ring } = this.sizeOf(key, size);
+        const t = await loadBakedTexture(gl, info, w, ring);
+        this.targets[key] = t;
+        this.textures[key] = t.texture;
+        return;
+      } catch (e) {
+        console.warn(`SOLARIS: the prepared texture "${key}" could not be loaded, painting it on the GPU instead`, e);
+      }
+    }
+    // GPU paints run one after another so they never fight for the card
+    const run = this.chain.then(() => this.bakeOne(gl, key, size));
+    this.chain = run.catch(() => undefined);
+    await run;
   }
 
   private async bakeOne(gl: THREE.WebGLRenderer, key: string, size: number) {

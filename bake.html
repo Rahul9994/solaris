@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SOLARIS — bake</title>
+    <style>
+      body { margin: 0; padding: 20px; background: #0b0b0d; color: #d8d8dc; font: 13px/1.5 ui-monospace, Consolas, monospace; }
+      h1 { font: 600 15px/1 ui-monospace, Consolas, monospace; margin: 0 0 6px; }
+      p { margin: 0 0 14px; opacity: 0.65; max-width: 70ch; }
+      button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #555; background: #1c1c22; color: inherit; cursor: pointer; }
+      button:disabled { opacity: 0.4; cursor: default; }
+      pre { white-space: pre-wrap; margin-top: 14px; }
+      canvas { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>SOLARIS — bake the planets</h1>
+    <p>Paints every surface photograph and planet texture on this GPU, encodes them and saves them to <code>public/baked/</code> (list in <code>src/data/baked.json</code>). Dev server only. Options: <code>?only=mars,earth</code> · <code>sw=2048</code> · <code>pw=2048</code> · <code>q=0.9</code> · <code>auto=1</code></p>
+    <button id="go">Bake everything</button>
+    <pre id="log"></pre>
+    <canvas id="gl" width="64" height="64"></canvas>
+    <script type="module" src="/src/tools/bake.ts"></script>
+  </body>
+</html>

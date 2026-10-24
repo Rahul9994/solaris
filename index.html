@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0b0d" />
-    <meta name="description" content="SOLARIS — step from planet to planet through the clouds. Every landscape is painted live on your GPU." />
+    <meta name="description" content="SOLARIS — step from planet to planet through the clouds. Every landscape is a photograph that never existed, painted by a GPU and shipped with the site." />
     <title>SOLARIS — Planets, Up Close</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%230b0b0d'/%3E%3Ccircle cx='24' cy='24' r='10' fill='%23fff'/%3E%3Cellipse cx='24' cy='24' rx='19' ry='6.5' fill='none' stroke='%23e0733f' stroke-width='3' transform='rotate(-24 24 24)'/%3E%3C/svg%3E" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter+Tight:wght@200;300;400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- the two faces the first screen needs; everything else is fetched when used -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/src/assets/fonts/inter-tight-latin-wght-normal.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/src/assets/fonts/anton-latin-400-normal.woff2" />
   </head>
   <body>
     <div id="root"></div>

@@ -34,7 +34,7 @@ export async function runLab() {
   hud.textContent = `${id} ${res.width}x${res.height}  total ${m.total.toFixed(0)} ms  (compile ${m.compile.toFixed(0)} · height ${m.height.toFixed(0)} · color ${m.color.toFixed(0)})`;
 
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tex: { value: view === 'height' && baker.lastHM ? baker.lastHM.texture : res.rt.texture }, uView: { value: view === 'height' ? 2 : view === 'depth' ? 1 : 0 }, uAspect: { value: innerWidth / innerHeight }, uImg: { value: res.width / res.height }, uCrop: { value: new THREE.Vector3(Number(q.get('cx') || 0.5), Number(q.get('cy') || 0.5), Number(q.get('z') || 1)) } },
+    uniforms: { tex: { value: view === 'height' && baker.lastHM ? baker.lastHM.texture : res.texture }, uView: { value: view === 'height' ? 2 : view === 'depth' ? 1 : 0 }, uAspect: { value: innerWidth / innerHeight }, uImg: { value: res.width / res.height }, uCrop: { value: new THREE.Vector3(Number(q.get('cx') || 0.5), Number(q.get('cy') || 0.5), Number(q.get('z') || 1)) } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy,0.,1.); }',
     fragmentShader: `precision highp float; varying vec2 vUv; uniform sampler2D tex; uniform float uView; uniform float uAspect; uniform float uImg; uniform vec3 uCrop;
       void main(){

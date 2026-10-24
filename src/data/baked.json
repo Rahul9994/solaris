@@ -1,0 +1,120 @@
+{
+  "version": "256d307d",
+  "surface": {
+    "earth": {
+      "w": 2560,
+      "h": 1440,
+      "c": "surf-earth-c.51376f65.webp",
+      "a": "surf-earth-a.534f1c78.webp"
+    },
+    "jupiter": {
+      "w": 2560,
+      "h": 1440,
+      "c": "surf-jupiter-c.febbe7b7.webp",
+      "a": "surf-jupiter-a.812110ce.webp"
+    },
+    "mars": {
+      "w": 2560,
+      "h": 1440,
+      "c": "surf-mars-c.583dea5e.webp",
+      "a": "surf-mars-a.fae4a42d.webp"
+    },
+    "mercury": {
+      "w": 2560,
+      "h": 1440,
+      "c": "surf-mercury-c.2cbfbde9.webp",
+      "a": "surf-mercury-a.c623e5fc.webp"
+    },
+    "neptune": {
+      "w": 2560,
+      "h": 1440,
+      "c": "surf-neptune-c.41fc81ed.webp",
+      "a": "surf-neptune-a.0b956542.webp"
+    },
+    "saturn": {
+      "w": 2560,
+      "h": 1440,
+      "c": "surf-saturn-c.94d23523.webp",
+      "a": "surf-saturn-a.5c4ef153.webp"
+    },
+    "uranus": {
+      "w": 2560,
+      "h": 1440,
+      "c": "surf-uranus-c.d95d0040.webp",
+      "a": "surf-uranus-a.da8b145b.webp"
+    },
+    "venus": {
+      "w": 2560,
+      "h": 1440,
+      "c": "surf-venus-c.76a08c00.webp",
+      "a": "surf-venus-a.17a168ce.webp"
+    }
+  },
+  "tex": {
+    "earth": {
+      "w": 2048,
+      "h": 1024,
+      "c": "tex-earth-c.45ce96be.webp",
+      "a": "tex-earth-a.bf6f0196.webp"
+    },
+    "earthExtra": {
+      "w": 2048,
+      "h": 1024,
+      "c": "tex-earthExtra-c.5dddc6fc.webp"
+    },
+    "jupiter": {
+      "w": 2048,
+      "h": 1024,
+      "c": "tex-jupiter-c.37bcf845.webp",
+      "a": "tex-jupiter-a.29811d9e.webp"
+    },
+    "mars": {
+      "w": 2048,
+      "h": 1024,
+      "c": "tex-mars-c.c31f6ad1.webp",
+      "a": "tex-mars-a.0244469b.webp"
+    },
+    "mercury": {
+      "w": 2048,
+      "h": 1024,
+      "c": "tex-mercury-c.0bbbdf78.webp",
+      "a": "tex-mercury-a.a1b4c53e.webp"
+    },
+    "neptune": {
+      "w": 1024,
+      "h": 512,
+      "c": "tex-neptune-c.8e03eadf.webp",
+      "a": "tex-neptune-a.b9c1f828.webp"
+    },
+    "ringSaturn": {
+      "w": 2048,
+      "h": 4,
+      "c": "tex-ringSaturn-c.a5a6c1a3.webp",
+      "a": "tex-ringSaturn-a.aea4eed8.webp"
+    },
+    "ringUranus": {
+      "w": 1024,
+      "h": 4,
+      "c": "tex-ringUranus-c.f9bf4da0.webp",
+      "a": "tex-ringUranus-a.b1250e0d.webp"
+    },
+    "saturn": {
+      "w": 2048,
+      "h": 1024,
+      "c": "tex-saturn-c.ced1478f.webp",
+      "a": "tex-saturn-a.fadca1ea.webp"
+    },
+    "uranus": {
+      "w": 1024,
+      "h": 512,
+      "c": "tex-uranus-c.9cb887d1.webp",
+      "a": "tex-uranus-a.1aecb897.webp"
+    },
+    "venus": {
+      "w": 2048,
+      "h": 1024,
+      "c": "tex-venus-c.f5cdb757.webp",
+      "a": "tex-venus-a.da533e3b.webp"
+    }
+  }
+}

@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { bakeSink } from './tools/bakeSink';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), bakeSink()],
   // relative asset paths: the build works from any folder, including a GitHub Pages project site (/solaris/)
   base: './',
   server: { port: 5173, host: true },

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { SurfaceBaker, Baked } from './surface/baker';
+import { bakedSurfaceInfo, loadBakedSurface } from './bakedLoad';
 import { OrbitScene } from './orbit';
 import { COMP_VERT, COMP_FRAG } from './composite';
 import { forge, textureKeysFor } from '../three/forge';
@@ -235,7 +236,7 @@ export class Stage {
         this.surfJobs.delete(id);
         this.surfProg.delete(id);
       };
-      job = this.baker.bake(id, QUALITY[this.quality].surface, report, background).then(
+      job = this.produceSurface(id, report, background).then(
         (baked) => {
           this.surfaces.set(id, baked);
           clear();
@@ -251,7 +252,24 @@ export class Stage {
     return job;
   }
 
-  /** Bakes the textures a planet needs for its orbital view. */
+  /** The shipped picture if there is one (the normal case), otherwise paint it on this GPU. */
+  private async produceSurface(id: PlanetId, report: (p: number) => void, background: boolean): Promise<Baked> {
+    const width = QUALITY[this.quality].surface;
+    const info = bakedSurfaceInfo(id);
+    if (info) {
+      const t0 = performance.now();
+      try {
+        const { rt, width: w, height: h } = await loadBakedSurface(this.renderer, info, width, report);
+        const total = performance.now() - t0;
+        return { id, texture: rt.texture, rt, from: 'file', width: w, height: h, ms: { compile: 0, height: 0, color: 0, total } };
+      } catch (e) {
+        console.warn(`SOLARIS: the prepared picture of ${id} could not be loaded, painting it on the GPU instead`, e);
+      }
+    }
+    return this.baker.bake(id, width, report, background);
+  }
+
+  /** Makes the textures a planet needs for its orbital view (shipped pictures, or painted on the GPU). */
   async ensureOrbit(id: PlanetId, onProgress?: (p: number) => void, background = false) {
     const keys = textureKeysFor(id);
     let n = 0;
@@ -306,7 +324,7 @@ export class Stage {
     if (!b) return;
     this.surfA = b;
     this.currentId = id;
-    this.comp.uniforms.tA.value = b.rt.texture;
+    this.comp.uniforms.tA.value = b.texture;
     this.comp.uniforms.uHasA.value = 1;
     const m = MOTES[id];
     this.comp.uniforms.uMotes.value.set(m[0], m[1], m[2], m[3]);
@@ -315,7 +333,7 @@ export class Stage {
   setSurfaceB(id: PlanetId | null) {
     const b = id ? this.surfaces.get(id) : null;
     this.surfB = b ?? null;
-    this.comp.uniforms.tB.value = b ? b.rt.texture : this.comp.uniforms.tA.value;
+    this.comp.uniforms.tB.value = b ? b.texture : this.comp.uniforms.tA.value;
     this.comp.uniforms.uHasB.value = b ? 1 : 0;
   }
 
