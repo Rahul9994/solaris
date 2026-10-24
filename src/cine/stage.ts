@@ -3,7 +3,8 @@ import gsap from 'gsap';
 import { SurfaceBaker, Baked } from './surface/baker';
 import { bakedSurfaceInfo, loadBakedSurface } from './bakedLoad';
 import { OrbitScene } from './orbit';
-import { COMP_VERT, COMP_FRAG } from './composite';
+import { makeMotes } from './motes';
+import { COMP_VERT, COMP_FRAG, CLOUD_FRAG } from './composite';
 import { forge, textureKeysFor } from '../three/forge';
 import { PLANET_BY_ID, PLANETS, PlanetId } from '../data/planets';
 import { QUALITY, Quality } from './quality';
@@ -89,8 +90,22 @@ export class Stage {
   private last = 0;
   private raf = 0;
   private watch = 0;
-  private slow = 0;
   private frames = 0;
+  /** frame-rate governor (see adapt) */
+  private govAcc = 0;
+  private govN = 0;
+  private govChanged = 0;
+  private govWait = 9;
+  private govProbing = false;
+  /** what the governor last saw: average ms per frame, and the resolution scale it settled on */
+  readonly perf = { ms: 16.7, fps: 60, scale: 1, live: 16.7 };
+  /** minimum ms between frames (raised while an overlay hides the scene) */
+  private minGap = 1;
+  /** 0 = card-sized, 1 = screen-sized (open / Explore), 2 = dive (blurred, so a little smaller) */
+  private orbitTier = 0;
+  private cloudRT: THREE.WebGLRenderTarget;
+  private cloudScene = new THREE.Scene();
+  private cloudMat: THREE.ShaderMaterial;
   private running = false;
   private dpScale: [number, number, number, number] = [0, 0, 0, 0];
   /** per-frame hooks (DOM follow-ups, cursor) */
@@ -137,6 +152,7 @@ export class Stage {
         uHasB: { value: 0 },
         uCard: { value: new THREE.Vector4() },
         uCardR: { value: 60 },
+        uOpen: { value: 0 },
         uCardAlpha: { value: 1 },
         uHover: { value: 0 },
         uDive: { value: 0 },
@@ -156,6 +172,28 @@ export class Stage {
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.comp);
     quad.frustumCulled = false;
     this.scene.add(quad);
+    this.scene.add(makeMotes(this.comp.uniforms));
+
+    // the cloud deck is drawn separately at half resolution and read by the compositor
+    this.cloudRT = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: false, type: THREE.UnsignedByteType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    this.cloudRT.texture.colorSpace = THREE.NoColorSpace;
+    this.comp.uniforms.tCloud = { value: this.cloudRT.texture };
+    this.cloudMat = new THREE.ShaderMaterial({
+      vertexShader: COMP_VERT,
+      fragmentShader: CLOUD_FRAG,
+      depthTest: false,
+      depthWrite: false,
+      uniforms: {
+        tNoise: this.comp.uniforms.tNoise,
+        uRes: this.comp.uniforms.uRes,
+        uSize: { value: new THREE.Vector2(4, 4) },
+        uFogT: this.comp.uniforms.uFogT,
+        uFocus: this.comp.uniforms.uFocus,
+      },
+    });
+    const cq = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.cloudMat);
+    cq.frustumCulled = false;
+    this.cloudScene.add(cq);
   }
 
   /* ------------------------------ sizing ------------------------------ */
@@ -170,11 +208,44 @@ export class Stage {
     const w = Math.round(this.cssW * this.dpr);
     const h = Math.round(this.cssH * this.dpr);
     this.comp.uniforms.uRes.value.set(w, h);
-    const ow = Math.max(2, Math.round(w * q.orbit));
-    const oh = Math.max(2, Math.round(h * q.orbit));
+    this.applyPortal();
+    this.syncOrbit(true);
+    const cw = Math.max(2, Math.ceil(w / 2));
+    const ch = Math.max(2, Math.ceil(h / 2));
+    this.cloudRT.setSize(cw, ch);
+    this.cloudMat.uniforms.uSize.value.set(cw, ch);
+    this.perf.scale = this.dprScale;
+  }
+
+  /**
+   * The orbit view is drawn into its own target. While the card rests it only shows a small crop of it, so the
+   * target is sized to the card (about 1.3 texels per card pixel) instead of to the screen: a third of the work.
+   * It grows to screen size as soon as the card opens, dives or becomes the Explore globe.
+   */
+  private syncOrbit(force = false) {
+    const q = QUALITY[this.quality];
+    const W = this.comp.uniforms.uRes.value.x;
+    const H = this.comp.uniforms.uRes.value.y;
+    let scale = this.orbitTier === 2 ? Math.min(q.orbit, 0.62) : q.orbit;
+    if (this.orbitTier === 0) {
+      const [, , hw, hh] = this.dpScale;
+      const span = Math.max((hw * 2) / W, (hh * 2) / H);
+      scale = Math.min(q.orbit, Math.max(0.3, span * 1.3));
+    }
+    const ow = Math.max(2, Math.round(W * scale));
+    const oh = Math.max(2, Math.round(H * scale));
+    if (!force && ow === this.orbitRT.width && oh === this.orbitRT.height) return;
     this.orbitRT.setSize(ow, oh);
     this.orbit.resize(ow, oh);
-    this.applyPortal();
+  }
+
+  orbitSize(): [number, number] {
+    return [this.orbitRT.width, this.orbitRT.height];
+  }
+
+  /** Lets an overlay that hides the scene slow the render loop right down (0 = full speed). */
+  setThrottle(ms: number) {
+    this.minGap = Math.max(1, ms);
   }
 
   setQuality(q: Quality) {
@@ -197,6 +268,7 @@ export class Stage {
     const cy = H - (this.portal.y + this.portal.h / 2) * s;
     this.dpScale = [cx, cy, (this.portal.w / 2) * s, (this.portal.h / 2) * s];
     void W;
+    if (this.comp.uniforms.uRes.value.x > 1) this.syncOrbit();
   }
 
   setPointer(nx: number, ny: number) {
@@ -386,6 +458,7 @@ export class Stage {
     try {
       await this.renderer.compileAsync(this.orbit.scene, this.orbit.camera);
       await this.renderer.compileAsync(this.scene, this.cam);
+      await this.renderer.compileAsync(this.cloudScene, this.cam);
     } catch {
       /* compile problems surface on first render */
     }
@@ -425,8 +498,9 @@ export class Stage {
   }
 
   frame(now: number, fromRaf = false) {
-    if (now - this.last < 1) return;
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    if (now - this.last < this.minGap) return;
+    const raw = (now - this.last) / 1000;
+    const dt = Math.min(0.05, raw);
     this.last = now;
     this.time += dt;
     this.frames++;
@@ -439,6 +513,13 @@ export class Stage {
     const u = this.comp.uniforms;
     const exploring = p.explore > 0.001;
     if (p.fog > 0.001 || p.dive > 0.001) p.fogT += dt;
+
+    // the orbit target is screen-sized only while the card is open (or diving / in Explore)
+    const tier = p.dive > 0.002 ? 2 : p.cardOpen > 0.002 || p.explore > 0.002 ? 1 : 0;
+    if (tier !== this.orbitTier) {
+      this.orbitTier = tier;
+      this.syncOrbit();
+    }
 
     // orbit view feeds the card, the dive and the globe
     const needOrbit = p.cardAlpha > 0.01 && (p.cardScale > 0.02 || exploring || p.cardOpen > 0.01);
@@ -464,6 +545,7 @@ export class Stage {
     u.uCard.value.set(rcx, rcy, Math.max(rhw, 0.5), Math.max(rhh, 0.5));
     const rest = Math.min(hw, hh) * 2 * 0.3 * Math.max(sc, 0.05);
     u.uCardR.value = rest * (1 - ease) + 0.001;
+    u.uOpen.value = ease;
 
     u.uTime.value = this.time;
     u.uPar.value.copy(this.pointer);
@@ -481,21 +563,52 @@ export class Stage {
     (u.uTint.value as THREE.Color).setScalar(p.tint);
 
     const r = this.renderer;
+    if (p.fog > 0.001) {
+      r.setRenderTarget(this.cloudRT);
+      r.render(this.cloudScene, this.cam);
+    }
     r.setRenderTarget(null);
     r.clear();
     r.render(this.scene, this.cam);
 
+    if (fromRaf && raw < 0.25) this.perf.live += (raw * 1000 - this.perf.live) * 0.06;
     this.onFrame?.(dt);
-    if (fromRaf) this.adapt(dt);
+    if (fromRaf) this.adapt(raw);
   }
 
-  /** Drops the canvas resolution if the GPU can't keep up. */
-  private adapt(dt: number) {
-    if (this.frames < 30 || this.paused) return;
-    this.slow = this.slow * 0.97 + dt * 0.03;
-    if (this.frames % 120 === 0 && this.slow > 1 / 38 && this.dprScale > 0.55) {
-      this.dprScale = Math.max(0.55, this.dprScale - 0.12);
+  /**
+   * Keeps the canvas at 60 fps. Frames are timed between animation callbacks; a whole second slower than
+   * ~49 fps sheds about a fifth of the pixels (floor 0.6). Because a 60 Hz display can't show headroom, it
+   * wins resolution back by probing: after a calm spell it tries one step up, and if that misses 60 again it
+   * backs off for twice as long. High-refresh screens are never held back, only genuinely slow frames count.
+   */
+  private adapt(raw: number) {
+    const p = this.p;
+    const moving = p.dive > 0.001 || (p.cardOpen > 0.001 && p.cardOpen < 0.999) || p.fog > 0.001;
+    if (this.frames < 45 || moving || document.hidden || raw > 0.25 || this.minGap > 1) return;
+    this.govAcc += raw;
+    this.govN++;
+    if (this.govAcc < 1) return;
+    const avg = (this.govAcc / this.govN) * 1000;
+    this.govAcc = 0;
+    this.govN = 0;
+    this.perf.ms = avg;
+    this.perf.fps = 1000 / avg;
+    const t = performance.now() / 1000;
+    if (avg > 20.5 && this.dprScale > 0.6) {
+      this.dprScale = Math.max(0.6, +(this.dprScale * 0.9).toFixed(3));
+      if (this.govProbing) this.govWait = Math.min(this.govWait * 2, 120);
+      this.govProbing = false;
+      this.govChanged = t;
       this.resize(this.cssW, this.cssH);
+    } else if (avg < 17.6 && this.dprScale < 1 && t - this.govChanged > this.govWait) {
+      this.dprScale = Math.min(1, +(this.dprScale + 0.1).toFixed(3));
+      this.govProbing = true;
+      this.govChanged = t;
+      this.resize(this.cssW, this.cssH);
+    } else if (this.govProbing && t - this.govChanged > 4) {
+      this.govProbing = false;
+      this.govWait = 9;
     }
   }
 
@@ -503,6 +616,8 @@ export class Stage {
     this.stop();
     this.baker.dispose();
     this.orbit.dispose();
+    this.cloudRT.dispose();
+    this.cloudMat.dispose();
     this.renderer.dispose();
   }
 }

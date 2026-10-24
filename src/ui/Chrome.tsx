@@ -24,6 +24,8 @@ export function Header() {
   const rest: NavKey = overlay === 'about' ? 'about' : phase === 'explore' ? 'explore' : 'planets';
   const active: NavKey = hover ?? rest;
 
+  // the highlight is a droplet: it stretches across the gap it travels, then settles with a little overshoot
+  const prevHl = useRef<{ x: number; w: number } | null>(null);
   useLayoutEffect(() => {
     const b = btns.current[active];
     const hl = hlRef.current;
@@ -31,9 +33,25 @@ export function Header() {
     if (!b || !hl || !pill) return;
     const pr = pill.getBoundingClientRect();
     const br = b.getBoundingClientRect();
-    hl.style.width = `${br.width}px`;
-    hl.style.transform = `translateX(${br.left - pr.left - 1}px)`;
+    const x = br.left - pr.left;
+    const w = br.width;
+    hl.style.width = `${w}px`;
+    hl.style.transform = `translateX(${x}px)`;
     hl.style.opacity = '1';
+    const from = prevHl.current;
+    if (from && (from.x !== x || from.w !== w) && !matchMedia('(prefers-reduced-motion: reduce)').matches && hl.animate) {
+      const left = Math.min(from.x, x);
+      const right = Math.max(from.x + from.w, x + w);
+      hl.animate(
+        [
+          { transform: `translateX(${from.x}px)`, width: `${from.w}px` },
+          { transform: `translateX(${left}px)`, width: `${right - left}px`, offset: 0.36 },
+          { transform: `translateX(${x}px)`, width: `${w}px` },
+        ],
+        { duration: 680, easing: 'cubic-bezier(0.3, 1.25, 0.45, 1)' },
+      );
+    }
+    prevHl.current = { x, w };
   }, [active, phase, overlay]);
 
   const setOrigin = (el: HTMLElement | null) => {
@@ -119,9 +137,36 @@ export function PlanetList() {
   const current = useStore((s) => s.current);
   const phase = useStore((s) => s.phase);
   const webgl = useStore((s) => s.webgl);
+  const idx = Math.max(0, PLANETS.findIndex((p) => p.id === current));
+  const bead = useRef<HTMLLIElement>(null);
+  const prev = useRef<number | null>(null);
+  // a glass bead marks the world you are on; between worlds it stretches like a drop of liquid
+  useLayoutEffect(() => {
+    const el = bead.current;
+    if (!el) return;
+    const row = 23;
+    const y = idx * row;
+    el.style.transform = `translateY(${y}px)`;
+    const from = prev.current;
+    if (from !== null && from !== idx && !matchMedia('(prefers-reduced-motion: reduce)').matches && el.animate) {
+      const a = from * row;
+      const span = Math.abs(y - a) / row;
+      el.animate(
+        [
+          { transform: `translateY(${a}px) scale(1, 1)` },
+          { transform: `translateY(${(a + y) / 2}px) scale(0.8, ${1 + Math.min(2.4, span * 0.45)})`, offset: 0.42 },
+          { transform: `translateY(${y}px) scale(1.14, 0.88)`, offset: 0.8 },
+          { transform: `translateY(${y}px) scale(1, 1)` },
+        ],
+        { duration: 760, easing: 'cubic-bezier(0.3, 1.05, 0.5, 1)' },
+      );
+    }
+    prev.current = idx;
+  }, [idx]);
   return (
     <nav aria-label="Planets">
       <ul className="plist" style={{ pointerEvents: phase === 'idle' || !webgl ? 'auto' : 'none' }}>
+        <li className="bead" ref={bead} aria-hidden="true" />
         {PLANETS.map((p, i) => (
           <li key={p.id} style={{ ['--i' as string]: i }}>
             <button
@@ -223,14 +268,16 @@ export function Developing() {
   const shown = last.current;
   return (
     <div className={`develop${d ? ' on' : ''}`} role="status" aria-live="polite" aria-hidden={!d}>
-      <div className="count">
-        {shown?.pct ?? 0}
-        <small>%</small>
+      <div className="develop-card">
+        <div className="count">
+          {shown?.pct ?? 0}
+          <small>%</small>
+        </div>
+        <div className="tip">Developing {shown?.name ?? ''}</div>
+        <button type="button" className="cancel" tabIndex={d ? 0 : -1} onClick={() => getDirector()?.cancel()}>
+          Cancel
+        </button>
       </div>
-      <div className="tip">Developing {shown?.name ?? ''}</div>
-      <button type="button" className="cancel" tabIndex={d ? 0 : -1} onClick={() => getDirector()?.cancel()}>
-        Cancel
-      </button>
     </div>
   );
 }
@@ -290,9 +337,29 @@ export function Cursor() {
     const node = el.current!;
     const qx = gsap.quickTo(node, 'x', { duration: 0.5, ease: 'power3' });
     const qy = gsap.quickTo(node, 'y', { duration: 0.5, ease: 'power3' });
+    const blob = node.querySelector('.blob') as HTMLElement | null;
+    let lx = 0;
+    let ly = 0;
+    let lt = performance.now();
+    let calm = 0;
     const move = (e: PointerEvent) => {
       qx(e.clientX);
       qy(e.clientY);
+      // the drop of glass leans into its own motion
+      if (blob) {
+        const now = performance.now();
+        const dt = Math.max(1, now - lt);
+        const vx = (e.clientX - lx) / dt;
+        const vy = (e.clientY - ly) / dt;
+        lx = e.clientX;
+        ly = e.clientY;
+        lt = now;
+        const sp = Math.min(1, Math.hypot(vx, vy) / 2.4);
+        blob.style.setProperty('--st', (sp * 0.4).toFixed(3));
+        blob.style.setProperty('--ang', `${Math.atan2(vy, vx).toFixed(3)}rad`);
+        clearTimeout(calm);
+        calm = window.setTimeout(() => blob.style.setProperty('--st', '0'), 90);
+      }
       const st = getStage();
       st?.setPointer((e.clientX / innerWidth) * 2 - 1, -((e.clientY / innerHeight) * 2 - 1));
     };
@@ -314,7 +381,9 @@ export function Cursor() {
 
   return (
     <div className={`cursor${hover ? ' on' : ''}${press ? ' press' : ''}`} ref={el} aria-hidden="true">
-      <div className="ring" />
+      <div className="ring">
+        <i className="blob" />
+      </div>
       <div className="dot" />
       <div className="lbl">Enter</div>
     </div>

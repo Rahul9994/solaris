@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles/fonts.css';
 import './styles/app.css';
+import './styles/glass.css';
 
 const q = new URLSearchParams(location.search);
 

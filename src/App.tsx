@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { useStore } from './state/store';
 import { PLANET_BY_ID, nextOf } from './data/planets';
-import { createEngine, destroyEngine, getDirector } from './cine/engine';
+import { createEngine, destroyEngine, getDirector, getStage } from './cine/engine';
 import { hasWebGL2 } from './lib/webgl';
 import { applyTitleFont } from './data/fonts';
 import { Loader } from './ui/Loader';
 import { Header, PlanetList, Portal, Developing, Title, Stats, Cursor } from './ui/Chrome';
 import { MenuOverlay, AboutOverlay, PlanetsOverlay } from './ui/Overlays';
 import { ExploreUI } from './ui/Explore';
+import { installGlass } from './ui/glass';
+import { mountFpsHud } from './ui/fpsHud';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -52,6 +54,7 @@ export default function App() {
     canvas.addEventListener('webglcontextlost', lost);
     canvas.addEventListener('webglcontextrestored', back);
     stage.start();
+    const hud = new URLSearchParams(location.search).has('fps') ? mountFpsHud(stage) : null;
     void director.boot().catch((e) => {
       console.error('SOLARIS boot failed', e);
       useStore.setState({ webgl: false, loadPct: 100 });
@@ -61,10 +64,28 @@ export default function App() {
       window.removeEventListener('resize', fit);
       document.removeEventListener('visibilitychange', fit);
       ro.disconnect();
+      hud?.();
       canvas.removeEventListener('webglcontextlost', lost);
       canvas.removeEventListener('webglcontextrestored', back);
       destroyEngine();
       sw.current = false;
+    };
+  }, []);
+
+  useEffect(() => installGlass(), []);
+
+  // behind a full-screen overlay nobody sees the scene move: let it idle at ~15 fps instead of burning the GPU
+  useEffect(() => {
+    let t = 0;
+    const unsub = useStore.subscribe((s, p) => {
+      if (s.overlay === p.overlay) return;
+      clearTimeout(t);
+      if (s.overlay) t = window.setTimeout(() => getStage()?.setThrottle(66), 1100);
+      else getStage()?.setThrottle(1);
+    });
+    return () => {
+      unsub();
+      clearTimeout(t);
     };
   }, []);
 

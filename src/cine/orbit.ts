@@ -273,11 +273,12 @@ export class OrbitScene {
       fragmentShader: STAR_FRAG,
       side: THREE.BackSide,
       depthWrite: false,
-      depthTest: false,
+      // drawn after the (opaque) planet with the depth test on: the star shader never runs behind the globe
+      depthTest: true,
       uniforms: { uTime: { value: 0 }, uPx: { value: 0.0006 } },
     });
     const stars = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), this.starMat);
-    stars.renderOrder = -10;
+    stars.renderOrder = 10;
     stars.frustumCulled = false;
     this.scene.add(stars);
   }

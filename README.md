@@ -18,6 +18,7 @@ npm run preview    # serve the production build
 | | |
 | --- | --- |
 | **Portal card** | A rounded-box SDF drawn in the compositor. Hover shows an "Enter" cursor ring; click and the card morphs to full screen, then a radial-blur dive through a procedurally noised cloud deck hands over to the arrival surface. |
+| **Liquid glass** | One material (`src/styles/glass.css`) for the whole interface: a faint tint, a colour-boosting blur, a lit rim that is bright toward the upper left, an inner highlight and a pointer-following sheen. The nav highlight is a droplet that stretches across the gap it travels; the planet index has a glass bead that does the same; the cursor is a drop of glass that leans into its own motion. The portal card itself is glass in the shader: a bezel that bends and splits the view into colour fringes, a specular rim that catches a drifting light, and an outline that ripples and swells toward the pointer. |
 | **Eight surfaces** | Mercury (airless crater field, black sky, huge low sun), Venus (sulfur haze, basalt plates, lava-lit cracks, shield volcanoes), Earth (savanna sunset with an acacia), Mars (dust-hazed buttes and boulder fields), Jupiter (cloud sea with the Great Red Spot, Io and Europa), Saturn (the real ring-plane geometry arching overhead), Uranus (pale methane haze), Neptune (ultramarine storm decks, cirrus streaks, Triton). |
 | **Depth parallax** | Each photograph is baked with a depth channel; the pointer shifts the image by depth, so it feels 3D without any 3D at run time. |
 | **Orbit views** | The card shows the next planet as a live 3D globe: baked surface, bump-mapped lighting, clouds, scattering atmosphere and rings. The same view is the **Explore** globe (drag, scroll, ← →) with Overview / Data / Atmosphere / Facts. |
@@ -25,6 +26,28 @@ npm run preview    # serve the production build
 | **Typography** | A heavy, very condensed title face (Anton, squeezed to the reference's proportions). The typeface selector in the Menu offers six more, including the original Syncopate as an opt-in. |
 | **Responsive** | Desktop layout from the reference; on phones the nav collapses to the Menu, the planet list becomes numbered chips and the stats table is trimmed. |
 | **Robust** | Keyboard (← → Enter), focus rings, reduced-motion mode, adaptive canvas resolution, and a plain-CSS fallback when WebGL2 is unavailable. |
+
+## 60 fps
+
+Measured on an Intel UHD iGPU at 1920×1080 / DPR 1.25 (the slowest machine this has been tried on), GPU + CPU time per frame, each frame forced to finish:
+
+| state | before | now |
+| --- | --- | --- |
+| resting page (card + photograph) | 15–19 ms | 8–9 ms |
+| Explore globe | 18 ms | 10–11 ms |
+| the dive through the clouds | 21 ms | ~10 ms (at 1080p×1.25) |
+
+What changed:
+
+- **Dust is sprites, not a per-pixel loop.** ~170 point sprites (`src/cine/motes.ts`) replace three layers of grid hashing in the compositor: 4 ms saved at 1080p.
+- **The orbit view is only as big as it is seen.** At rest the card shows a small crop, so its render target is sized to the card (~1.3 texels per pixel); it grows to screen size when the card opens, and shrinks a little during the dive, where it is blurred anyway. Stars are drawn after the planet with the depth test on, so their shader never runs behind the globe.
+- **The cloud deck renders at half resolution** into its own target (`CLOUD_FRAG`); the compositor just reads it.
+- **The compositor skips what can't be seen:** the card SDF (and its pow/exp) is only evaluated within reach of the card's shadow, the parallax uses one depth tap, and the radial blurs use 6–7 taps.
+- **A frame-rate governor** (`Stage.adapt`) times frames; a whole second slower than ~49 fps sheds ~10% of the canvas pixels (floor 0.6), and calm spells probe one step back up (backing off exponentially after a failed probe). High-refresh screens are never held back.
+- **Idle behind overlays:** while a full-screen overlay hides the scene, the loop drops to ~15 fps.
+- **Glass is cheap by construction:** only a handful of small elements blur over the live canvas; big surfaces (menu, Explore panel) only blur while open; everything animates with `transform` / `opacity`.
+
+Add `?fps` to the address to see a live readout (frame rate, canvas size and resolution scale, orbit target size).
 
 ## How the "photographs" are made (and why they are shipped, not painted at load)
 
@@ -48,7 +71,8 @@ src/
   cine/
     stage.ts        renderer, loop, compositor uniforms, asset scheduling
     bakedLoad.ts    fetches the shipped pictures and merges them into render targets on the GPU
-    composite.ts    the single screen shader: parallax backdrop, squircle card, dive, grain
+    composite.ts    the screen shader (parallax backdrop, glass card, dive, grain) + the half-res cloud-deck shader
+    motes.ts        dust sprites
     orbit.ts        live planet view (portal card, Explore globe, thumbnails)
     director.ts     choreography (intro, card→dive→arrival, explore) with GSAP
     gpu.ts          strip renderer + fence waits (never blocks the main thread)
@@ -56,7 +80,7 @@ src/
   three/            planet texture recipes (used by the bake tool / fallback) + atmosphere/ring/cloud shaders
   tools/bake.ts     the offline bake (bake.html): paints, encodes and saves everything
   assets/fonts/     self-hosted woff2 fonts (licences in LICENSES.md)
-  styles/           app.css, fonts.css
+  styles/           app.css, glass.css (the liquid-glass material), fonts.css
   data/             planets.ts (order, stats), bodies.ts (NASA fact sheet data), fonts.ts
   ui/               Loader, Chrome (nav, list, portal, title, stats, cursor), Overlays, Explore
   state/            zustand store
