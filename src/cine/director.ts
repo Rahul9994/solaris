@@ -10,6 +10,17 @@ const get = useStore.getState;
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const tl = (vars?: gsap.TimelineVars) => gsap.timeline(vars);
 const done = (t: gsap.core.Timeline | gsap.core.Tween) => new Promise<void>((r) => void t.then(() => r()));
+/** true if the promise resolved, false (and logged) if it rejected */
+const settles = (p: Promise<unknown>) =>
+  p.then(
+    () => true,
+    (e) => {
+      console.error('SOLARIS: bake failed', e);
+      return false;
+    },
+  );
+/** the longest a visitor waits on an unfinished photograph before the card closes again */
+const DEVELOP_LIMIT_MS = 120_000;
 
 /**
  * Choreography. The stage owns pixels; the director owns time. Every motion here is a tween of plain
@@ -18,6 +29,7 @@ const done = (t: gsap.core.Timeline | gsap.core.Tween) => new Promise<void>((r) 
 export class Director {
   busy = false;
   private booted = false;
+  private cancelDevelop: (() => void) | null = null;
 
   constructor(readonly stage: Stage) {}
 
@@ -68,7 +80,8 @@ export class Director {
     t.call(() => set({ uiIn: true }), undefined, reduce ? 0.1 : 0.85);
     await done(t);
     set({ phase: 'idle' });
-    st.warmRest([START_PLANET, nextOf(START_PLANET).id]);
+    // the world behind the portal card goes first, so a click on it has somewhere to land
+    st.warmRest([START_PLANET], nextOf(START_PLANET).id);
   }
 
   /* ------------------------------ hover ------------------------------ */
@@ -96,36 +109,56 @@ export class Director {
 
     const needSurface = st.ensureSurface(target);
     const needOrbit = st.ensureOrbit(target);
+    // a failure is handled where it is awaited below, never left as a stray rejection
+    needSurface.catch(() => {});
+    needOrbit.catch(() => {});
 
     // pick the world for the card, shrinking the old one away if it differs
     if (target !== st.nextId) {
       await done(gsap.to(st.p, { cardScale: 0, duration: 0.38, ease: 'power2.in' }));
-      await needOrbit;
+      if (!(await settles(needOrbit))) return this.stay('failed', target, false);
       st.setCardPlanet(target);
       set({ next: target });
       await done(gsap.to(st.p, { cardScale: 1, duration: 0.55, ease: 'back.out(1.4)' }));
-    } else {
-      await needOrbit;
+    } else if (!(await settles(needOrbit))) {
+      return this.stay('failed', target, false);
     }
     await wait(60);
 
     set({ phase: 'leaving' });
     sfx.whoosh();
 
+    const ready = st.hasSurface(target);
+    const rise = (t: gsap.core.Timeline) => t.to(st.p, { cardOpen: 1, duration: 1.0, ease: 'power3.inOut' }, 0);
+    const plunge = (t: gsap.core.Timeline, at: number) => {
+      t.call(() => set({ phase: 'diving' }), undefined, at + 0.05);
+      t.to(st.p, { dive: 1, duration: 1.35, ease: 'power2.in' }, at);
+      t.to(st.p, { fog: 1, duration: 0.85, ease: 'power1.in' }, at + 0.5);
+    };
+
     if (reduce) {
-      await needSurface;
+      if (!ready) {
+        const r = await this.develop(target, needSurface);
+        if (r !== 'ready') return this.stay(r, target, false);
+      }
       st.setSurfaceB(target);
       await done(gsap.to(st.p, { mix: 1, cardAlpha: 0, duration: 0.7, ease: 'power1.inOut' }));
     } else {
-      // the card opens to full screen, then the camera falls through the cloud deck
-      const dive = tl();
-      dive.to(st.p, { cardOpen: 1, duration: 1.0, ease: 'power3.inOut' }, 0);
-      dive.call(() => set({ phase: 'diving' }), undefined, 0.7);
-      dive.to(st.p, { dive: 1, duration: 1.35, ease: 'power2.in' }, 0.65);
-      dive.to(st.p, { fog: 1, duration: 0.85, ease: 'power1.in' }, 1.15);
-      await done(dive);
-      // if the photograph isn't ready yet the clouds simply keep churning
-      await needSurface;
+      if (ready) {
+        // the card opens to full screen while the camera already starts to fall through the cloud deck
+        const dive = rise(tl());
+        plunge(dive, 0.65);
+        await done(dive);
+      } else {
+        // the photograph is still developing: open the card and wait on its globe (with a counter), and only
+        // fall into the clouds once there is somewhere to land. The cloud deck must never be left churning.
+        await done(rise(tl()));
+        const r = await this.develop(target, needSurface);
+        if (r !== 'ready') return this.stay(r, target, true);
+        const dive = tl();
+        plunge(dive, 0);
+        await done(dive);
+      }
       st.setSurfaceB(target);
       st.p.mix = 1;
       st.p.zoomB = 1.45;
@@ -156,7 +189,7 @@ export class Director {
 
     // the portal card for the world beyond
     const nxt = nextOf(target).id;
-    await st.ensureOrbit(nxt);
+    await st.ensureOrbit(nxt).catch((e) => console.warn('orbit bake failed', nxt, e));
     st.setCardPlanet(nxt);
     st.p.cardAlpha = 1;
     set({ next: nxt });
@@ -165,6 +198,58 @@ export class Director {
 
     this.busy = false;
     st.setBusy(false);
+    // start developing the world this card leads to while the visitor is reading
+    st.prioritize(nxt);
+  }
+
+  /**
+   * Holds on the open card while a photograph that isn't ready yet finishes baking, reporting progress to the UI.
+   * Gives up (rather than waiting forever) if the bake fails, takes unreasonably long, or the visitor cancels.
+   */
+  private async develop(target: PlanetId, job: Promise<unknown>): Promise<'ready' | 'failed' | 'cancelled'> {
+    const st = this.stage;
+    const name = PLANET_BY_ID[target].name;
+    const show = () => set({ developing: { name, pct: Math.min(99, Math.round(st.surfaceProgress(target) * 100)) } });
+    show();
+    const iv = window.setInterval(show, 150);
+    let timer = 0;
+    const bail = new Promise<'failed' | 'cancelled'>((resolve) => {
+      this.cancelDevelop = () => resolve('cancelled');
+      timer = window.setTimeout(() => resolve('failed'), DEVELOP_LIMIT_MS);
+    });
+    try {
+      return await Promise.race([job.then(() => 'ready' as const), bail]);
+    } catch (e) {
+      console.error('SOLARIS: the surface of', name, 'could not be developed', e);
+      return 'failed';
+    } finally {
+      clearInterval(iv);
+      clearTimeout(timer);
+      this.cancelDevelop = null;
+      set({ developing: null });
+    }
+  }
+
+  /** Backs out of a transition that can't complete: closes the card again and says why. */
+  private async stay(why: 'failed' | 'cancelled', target: PlanetId, opened: boolean) {
+    const st = this.stage;
+    await done(gsap.to(st.p, { cardOpen: 0, cardScale: 1, duration: opened ? 0.9 : 0.4, ease: 'power3.inOut' }));
+    set({ phase: 'idle', uiIn: true, developing: null });
+    if (why === 'failed') this.say(`${PLANET_BY_ID[target].name} couldn’t be developed just now. Try again in a moment.`);
+    this.busy = false;
+    st.setBusy(false);
+  }
+
+  /** The visitor gave up waiting for the photograph (button or Esc). */
+  cancel() {
+    this.cancelDevelop?.();
+  }
+
+  private say(text: string) {
+    set({ toast: text });
+    window.setTimeout(() => {
+      if (get().toast === text) set({ toast: null });
+    }, 4200);
   }
 
   goNext() {

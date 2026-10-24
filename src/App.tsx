@@ -6,7 +6,7 @@ import { createEngine, destroyEngine, getDirector } from './cine/engine';
 import { hasWebGL2 } from './lib/webgl';
 import { applyTitleFont } from './data/fonts';
 import { Loader } from './ui/Loader';
-import { Header, PlanetList, Portal, Title, Stats, Cursor } from './ui/Chrome';
+import { Header, PlanetList, Portal, Developing, Title, Stats, Cursor } from './ui/Chrome';
 import { MenuOverlay, AboutOverlay, PlanetsOverlay } from './ui/Overlays';
 import { ExploreUI } from './ui/Explore';
 
@@ -43,6 +43,14 @@ export default function App() {
     document.addEventListener('visibilitychange', fit);
     const ro = new ResizeObserver(fit);
     ro.observe(document.documentElement);
+    // a reset graphics context wipes every baked photograph: say so, and start over once the browser hands it back
+    const lost = (e: Event) => {
+      e.preventDefault();
+      useStore.setState({ toast: 'The graphics card reset. Restoring the planets…' });
+    };
+    const back = () => window.location.reload();
+    canvas.addEventListener('webglcontextlost', lost);
+    canvas.addEventListener('webglcontextrestored', back);
     stage.start();
     void director.boot().catch((e) => {
       console.error('SOLARIS boot failed', e);
@@ -53,6 +61,8 @@ export default function App() {
       window.removeEventListener('resize', fit);
       document.removeEventListener('visibilitychange', fit);
       ro.disconnect();
+      canvas.removeEventListener('webglcontextlost', lost);
+      canvas.removeEventListener('webglcontextrestored', back);
       destroyEngine();
       sw.current = false;
     };
@@ -68,6 +78,8 @@ export default function App() {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const s = useStore.getState();
+      // Esc gives up on a photograph that is still developing
+      if (e.key === 'Escape' && s.developing) getDirector()?.cancel();
       if (s.phase !== 'idle' || s.overlay) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') void getDirector()?.goNext();
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') void getDirector()?.goPrev();
@@ -95,6 +107,7 @@ export default function App() {
       <Header />
       <PlanetList />
       <Portal />
+      <Developing />
       <Title />
       <Stats />
       <ExploreUI />

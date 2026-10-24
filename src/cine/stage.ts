@@ -81,6 +81,7 @@ export class Stage {
   private pointerT = new THREE.Vector2();
   private surfaces = new Map<PlanetId, Baked>();
   private surfJobs = new Map<PlanetId, Promise<Baked>>();
+  private surfProg = new Map<PlanetId, number>();
   private surfA: Baked | null = null;
   private surfB: Baked | null = null;
   private time = 0;
@@ -207,6 +208,15 @@ export class Stage {
     return this.surfaces.get(id) ?? null;
   }
 
+  hasSurface(id: PlanetId) {
+    return this.surfaces.has(id);
+  }
+
+  /** 0…1 progress of a planet's photograph, whoever started the bake. */
+  surfaceProgress(id: PlanetId) {
+    return this.surfaces.has(id) ? 1 : this.surfProg.get(id) ?? 0;
+  }
+
   /** Bakes (or returns) the surface photograph of a planet. */
   async ensureSurface(id: PlanetId, onProgress?: (p: number) => void, background = false): Promise<Baked> {
     const have = this.surfaces.get(id);
@@ -216,11 +226,26 @@ export class Stage {
       // someone just asked for a surface that is baking quietly in the background: speed it up
       if (!background) this.baker.promote(id);
     } else {
-      job = this.baker.bake(id, QUALITY[this.quality].surface, onProgress, background).then((baked) => {
-        this.surfaces.set(id, baked);
+      const report = (p: number) => {
+        this.surfProg.set(id, p);
+        onProgress?.(p);
+      };
+      // a failed bake must not stay cached: the next request starts over
+      const clear = () => {
         this.surfJobs.delete(id);
-        return baked;
-      });
+        this.surfProg.delete(id);
+      };
+      job = this.baker.bake(id, QUALITY[this.quality].surface, report, background).then(
+        (baked) => {
+          this.surfaces.set(id, baked);
+          clear();
+          return baked;
+        },
+        (e) => {
+          clear();
+          throw e;
+        },
+      );
       this.surfJobs.set(id, job);
     }
     return job;
@@ -234,9 +259,20 @@ export class Stage {
     onProgress?.(1);
   }
 
-  /** Quietly bakes the remaining planets between interactions. */
-  warmRest(except: PlanetId[]) {
+  /** Quietly bakes the remaining planets between interactions. `first` is the world the portal card leads to. */
+  warmRest(except: PlanetId[], first?: PlanetId) {
     for (const p of PLANETS) if (!except.includes(p.id) && !this.bgQueue.includes(p.id)) this.bgQueue.push(p.id);
+    if (first) this.prioritize(first);
+    else void this.drainBackground();
+  }
+
+  /** Moves a planet to the front of the quiet queue, so the card's destination is usually ready before it is clicked. */
+  prioritize(id: PlanetId) {
+    if (this.surfaces.has(id)) return;
+    this.baker.hurry(id);
+    const at = this.bgQueue.indexOf(id);
+    if (at >= 0) this.bgQueue.splice(at, 1);
+    this.bgQueue.unshift(id);
     void this.drainBackground();
   }
 

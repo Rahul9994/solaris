@@ -212,6 +212,30 @@ export function Portal() {
 }
 
 /* ------------------------------------------------------------------ */
+/* "Developing…" counter: the card is open, the photograph isn't ready  */
+/* ------------------------------------------------------------------ */
+
+export function Developing() {
+  const d = useStore((s) => s.developing);
+  // keep the last text on screen while the counter fades out
+  const last = useRef(d);
+  if (d) last.current = d;
+  const shown = last.current;
+  return (
+    <div className={`develop${d ? ' on' : ''}`} role="status" aria-live="polite" aria-hidden={!d}>
+      <div className="count">
+        {shown?.pct ?? 0}
+        <small>%</small>
+      </div>
+      <div className="tip">Developing {shown?.name ?? ''}</div>
+      <button type="button" className="cancel" tabIndex={d ? 0 : -1} onClick={() => getDirector()?.cancel()}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Title + stats                                                       */
 /* ------------------------------------------------------------------ */
 

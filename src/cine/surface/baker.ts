@@ -110,6 +110,7 @@ export class SurfaceBaker {
   }
 
   private urgent = new Set<PlanetId>();
+  private soon = new Set<PlanetId>();
 
   /** Bakes run concurrently (each strip sets its own material); a background job can be promoted mid-flight. */
   bake(id: PlanetId, width: number, onProgress?: (p: number) => void, background = false): Promise<Baked> {
@@ -119,6 +120,11 @@ export class SurfaceBaker {
 
   promote(id: PlanetId) {
     this.urgent.add(id);
+  }
+
+  /** The portal card's destination: still polite to the page, but brisker than the rest of the quiet queue. */
+  hurry(id: PlanetId) {
+    this.soon.add(id);
   }
 
   private async run(id: PlanetId, width: number, onProgress?: (p: number) => void): Promise<Baked> {
@@ -173,7 +179,7 @@ export class SurfaceBaker {
     const prevAuto = gl.autoClear;
     gl.autoClear = false;
 
-    const pace = () => (this.urgent.has(id) ? { budgetMs: 14, gapMs: 0 } : { budgetMs: 5, gapMs: 12 });
+    const pace = () => (this.urgent.has(id) ? { budgetMs: 14, gapMs: 0 } : this.soon.has(id) ? { budgetMs: 9, gapMs: 1 } : { budgetMs: 5, gapMs: 12 });
     await renderInStrips(
       gl,
       hm,
@@ -212,6 +218,7 @@ export class SurfaceBaker {
       { pace, startRows: 32, onProgress: (p) => onProgress?.(0.25 + p * 0.75) },
     );
     this.urgent.delete(id);
+    this.soon.delete(id);
 
     gl.setRenderTarget(prevTarget);
     gl.autoClear = prevAuto;

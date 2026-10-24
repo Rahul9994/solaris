@@ -40,6 +40,8 @@ interface State {
   ready: Record<string, boolean>;
   exploreTab: 'overview' | 'data' | 'atmosphere' | 'facts';
   toast: string | null;
+  /** the portal card is open and waiting for its destination photograph to finish developing */
+  developing: { name: string; pct: number } | null;
   set: (p: Partial<State>) => void;
 }
 
@@ -60,5 +62,6 @@ export const useStore = create<State>((set) => ({
   ready: {},
   exploreTab: 'overview',
   toast: null,
+  developing: null,
   set: (p) => set(p),
 }));

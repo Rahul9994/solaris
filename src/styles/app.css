@@ -1010,6 +1010,68 @@ a {
   transform: scale(1.06);
 }
 
+/* the open card waiting for its photograph (same voice as the loader counter) */
+.develop {
+  position: fixed;
+  left: 50%;
+  bottom: clamp(24px, 6vh, 64px);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  transform: translate(-50%, 14px);
+  opacity: 0;
+  filter: blur(8px);
+  pointer-events: none;
+  transition: opacity 0.45s ease, filter 0.5s ease, transform 0.7s var(--ease-out);
+}
+.develop.on {
+  opacity: 1;
+  filter: none;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.develop .count {
+  display: flex;
+  align-items: baseline;
+  font-weight: 200;
+  font-size: clamp(44px, 5.4vw, 80px);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.5);
+}
+.develop .count small {
+  font-size: 0.34em;
+  font-weight: 700;
+  margin-left: 0.08em;
+}
+.develop .tip {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+.develop .cancel {
+  margin-top: 4px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-line);
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.3s, color 0.3s;
+}
+.develop .cancel:hover {
+  background: #fff;
+  color: var(--ink);
+}
+
 .toast {
   position: fixed;
   left: 50%;
